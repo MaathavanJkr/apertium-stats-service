@@ -41,9 +41,8 @@ extern crate tokio_process;
 #[macro_use]
 extern crate slog;
 extern crate graphql_client;
-extern crate hyper;
-extern crate hyper_tls;
 extern crate quick_xml;
+extern crate reqwest;
 extern crate slog_async;
 extern crate slog_term;
 
@@ -51,8 +50,6 @@ use std::{cmp::max, collections::HashSet, env, hash::BuildHasher, sync::Arc, thr
 
 use diesel::{dsl::sql, prelude::*};
 use dotenv::dotenv;
-use hyper::{client::connect::HttpConnector, Client};
-use hyper_tls::HttpsConnector;
 use rocket::{
     http::{Accept, ContentType, MediaType, Method, Status},
     request::Form,
@@ -80,9 +77,7 @@ pub const PACKAGE_UPDATE_FALLBACK_INTERVAL: Duration = Duration::from_secs(120);
 lazy_static! {
     pub static ref RUNTIME: Runtime = Runtime::new().unwrap();
     pub static ref HTTPS_CLIENT: reqwest::Client = reqwest::Client::new();
-    pub static ref HYPER_HTTPS_CLIENT: Client<HttpsConnector<HttpConnector>> = Client::builder()
-        .executor(RUNTIME.executor())
-        .build(HttpsConnector::new(4).unwrap());
+    pub static ref ASYNC_HTTPS_CLIENT: reqwest::async::Client = reqwest::async::Client::new();
 }
 
 fn launch_tasks_and_reply(

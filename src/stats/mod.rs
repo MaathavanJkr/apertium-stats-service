@@ -7,8 +7,8 @@ use std::{
     str::Utf8Error,
 };
 
-use hyper::Error as HyperError;
 use regex::{Regex, RegexSet, RegexSetBuilder};
+use reqwest::Error as ReqwestError;
 use rocket_contrib::json::JsonValue;
 use slog::Logger;
 use tempfile::NamedTempFile;
@@ -16,12 +16,12 @@ use tokio::prelude::{Future, Stream};
 
 use models::{FileKind, StatKind};
 use util::LANG_CODE_RE;
-use HYPER_HTTPS_CLIENT;
+use ASYNC_HTTPS_CLIENT;
 use ORGANIZATION_RAW_ROOT;
 
 #[derive(Debug)]
 pub enum StatsError {
-    Hyper(HyperError),
+    Reqwest(ReqwestError),
     Utf8(Utf8Error),
     Io(io::Error),
     Xml(String),
@@ -35,19 +35,18 @@ pub fn get_file_stats(
     package_name: &str,
     file_kind: FileKind,
 ) -> impl Future<Item = Vec<(StatKind, JsonValue)>, Error = StatsError> {
-    let url = format!("{}/{}/master/{}", ORGANIZATION_RAW_ROOT, package_name, file_path)
-        .parse()
-        .unwrap();
+    let url = format!("{}/{}/master/{}", ORGANIZATION_RAW_ROOT, package_name, file_path);
     let logger = logger.clone();
 
-    HYPER_HTTPS_CLIENT
-        .get(url)
-        .map_err(StatsError::Hyper)
+    ASYNC_HTTPS_CLIENT
+        .get(url.as_str())
+        .send()
+        .map_err(StatsError::Reqwest)
         .and_then(|response| {
             response
                 .into_body()
                 .concat2()
-                .map_err(StatsError::Hyper)
+                .map_err(StatsError::Reqwest)
                 .and_then(move |body| match file_kind {
                     FileKind::Monodix | FileKind::MetaMonodix => self::xml::get_monodix_stats(body, &file_path),
                     FileKind::Bidix | FileKind::MetaBidix | FileKind::Postdix => {

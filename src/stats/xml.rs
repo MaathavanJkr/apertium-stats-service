@@ -1,10 +1,10 @@
 use std::str;
 
-use hyper::Chunk;
 use quick_xml::{
     events::{attributes::Attribute, Event},
     Reader,
 };
+use reqwest::async::Chunk;
 use rocket_contrib::json::JsonValue;
 
 use models::StatKind;

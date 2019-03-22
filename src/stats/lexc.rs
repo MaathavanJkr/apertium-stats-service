@@ -4,8 +4,8 @@ use std::{
     iter::FromIterator,
 };
 
-use hyper::Chunk;
 use regex::Regex;
+use reqwest::async::Chunk;
 use rocket_contrib::json::JsonValue;
 use slog::Logger;
 
