@@ -266,14 +266,19 @@ fn openapi_yaml() -> Content<&'static str> {
 fn get_stats(name: String, params: Form<Option<Params>>, conn: DbConn, worker: State<Arc<Worker>>) -> JsonResult {
     let name = parse_name_param(&name, get_package_names(&worker))?;
 
-    let entries: Vec<models::Entry> = entries_db::table
+    let entries = entries_db::table
         .filter(entries_db::name.eq(&name))
+        .filter(sql("1 GROUP BY stat_kind, path")) // HACK: Diesel has no real group_by :(
         .order(entries_db::created)
-        .limit(1)
         .load::<models::Entry>(&*conn)
         .map_err(|err| handle_db_error(&worker.logger, err))?;
 
-    if entries.is_empty() {
+    let since_satisfied = params
+        .as_ref()
+        .and_then(|p| p.since.as_ref())
+        .map_or(true, |since| entries.iter().all(|e| e.created >= since.0));
+
+    if entries.is_empty() || !since_satisfied {
         if let Some(in_progress_tasks) = worker.get_tasks_in_progress(&name) {
             JsonResult::Err(
                 Some(json!({
@@ -287,12 +292,6 @@ fn get_stats(name: String, params: Form<Option<Params>>, conn: DbConn, worker: S
             launch_tasks_and_reply(&worker, name, None, params.into_inner().unwrap_or_default())
         }
     } else {
-        let entries = entries_db::table
-            .filter(entries_db::name.eq(&name))
-            .filter(sql("1 GROUP BY stat_kind, path")) // HACK: Diesel has no real group_by :(
-            .order(entries_db::created)
-            .load::<models::Entry>(&*conn)
-            .map_err(|err| handle_db_error(&worker.logger, err))?;
         JsonResult::Ok(json!({
             "name": name,
             "stats": entries,
@@ -312,15 +311,20 @@ fn get_specific_stats(
     let name = parse_name_param(&name, get_package_names(&worker))?;
     let file_kind = parse_kind_param(&name, &kind)?;
 
-    let entries: Vec<models::Entry> = entries_db::table
+    let entries = entries_db::table
         .filter(entries_db::name.eq(&name))
         .filter(entries_db::file_kind.eq(&file_kind))
+        .filter(sql("1 GROUP BY stat_kind, path")) // HACK: Diesel has no real group_by :(
         .order(entries_db::created)
-        .limit(1)
         .load::<models::Entry>(&*conn)
         .map_err(|err| handle_db_error(&worker.logger, err))?;
 
-    if entries.is_empty() {
+    let since_satisfied = params
+        .as_ref()
+        .and_then(|p| p.since.as_ref())
+        .map_or(true, |since| entries.iter().all(|e| e.created >= since.0));
+
+    if entries.is_empty() || !since_satisfied {
         if let Some(in_progress_tasks) = worker.get_tasks_in_progress(&name) {
             if in_progress_tasks.iter().filter(|task| task.kind == file_kind).count() != 0 {
                 return JsonResult::Err(
@@ -336,13 +340,6 @@ fn get_specific_stats(
         drop(conn);
         launch_tasks_and_reply(&worker, name, Some(&file_kind), params.into_inner().unwrap_or_default())
     } else {
-        let entries = entries_db::table
-            .filter(entries_db::name.eq(&name))
-            .filter(entries_db::file_kind.eq(&file_kind))
-            .filter(sql("1 GROUP BY stat_kind, path")) // HACK: Diesel has no real group_by :(
-            .order(entries_db::created)
-            .load::<models::Entry>(&*conn)
-            .map_err(|err| handle_db_error(&worker.logger, err))?;
         JsonResult::Ok(json!({
             "name": name,
             "stats": entries,

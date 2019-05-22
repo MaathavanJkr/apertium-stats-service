@@ -7,6 +7,7 @@ use std::{
     ops::Try,
 };
 
+use chrono::{DateTime, NaiveDateTime};
 use diesel::{
     backend::Backend,
     deserialize::{self, FromSql},
@@ -17,7 +18,8 @@ use diesel::{
 };
 use regex::Regex;
 use rocket::{
-    http::Status,
+    http::{RawStr, Status},
+    request::FromFormValue,
     response::{Responder, Response},
     Request,
 };
@@ -192,10 +194,24 @@ impl From<RocketJsonValue> for JsonValue {
     }
 }
 
+pub struct NaiveDateFormValue(pub NaiveDateTime);
+
+impl<'v> FromFormValue<'v> for NaiveDateFormValue {
+    type Error = &'v RawStr;
+
+    fn from_form_value(form_value: &'v RawStr) -> Result<NaiveDateFormValue, &'v RawStr> {
+        match DateTime::parse_from_rfc3339(form_value) {
+            Ok(v) => Ok(NaiveDateFormValue(v.naive_utc())),
+            _ => Err(form_value),
+        }
+    }
+}
+
 #[derive(FromForm)]
 pub struct Params {
     pub recursive: Option<bool>,
     pub async: Option<bool>,
+    pub since: Option<NaiveDateFormValue>,
 }
 
 impl Params {
@@ -206,6 +222,10 @@ impl Params {
     pub fn is_recursive(&self) -> bool {
         self.recursive.unwrap_or(false)
     }
+
+    pub fn has_since(&self) -> bool {
+        self.since.is_some()
+    }
 }
 
 impl Default for Params {
@@ -213,6 +233,7 @@ impl Default for Params {
         Self {
             recursive: None,
             async: Some(true),
+            since: None,
         }
     }
 }
